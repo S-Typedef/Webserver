@@ -1,18 +1,18 @@
 #include "http_conn.h"
 
 //定义一些HTTP响应的状态信息
-const char* ok_200_title = "OK";
-const char* error_400_title = "Bad Request";
-const char* error_400_form = "Your request has bad syntax or is inherently impossible to satisfy.\n";
-const char* error_403_title = "Forbidden";
-const char* error_403_form = "you o not have permisson to get file from this server.\n";
-const char* error_404_title = "Not Found";
-const char* error_404_form = "The requested file was not found on this server.\n";
-const char* error_500_title = "Internal Error";
-const char* error_500_form = "There was an unusual problem serving the requested file.\n";
+const char* ok_200_title    = "OK.\n";
+const char* error_400_title = "Bad Request.\n";
+const char* error_400_form  = "Your request has bad syntax or is inherently impossible to satisfy.\n";
+const char* error_403_title = "Forbidden.\n";
+const char* error_403_form  = "You do not have permisson to get file from this server.\n";
+const char* error_404_title = "Not Found.\n";
+const char* error_404_form  = "The requested file was not found on this server.\n";
+const char* error_500_title = "Internal Error.\n";
+const char* error_500_form  = "There was an unusual problem serving the requested file.\n";
 
 //网站的根目录
-const char* doc_root = "/home/chendongyu/Docment/webserver_test/webserver/root";
+const char* doc_root = "/root/zzh/webserver";
 
 int setnonblocking(int fd)
 {
@@ -22,11 +22,12 @@ int setnonblocking(int fd)
     return old_option;
 }
 
+//向epoll中添加需要监听到的文件描述符
 void addfd(int epollfd, int fd, bool one_shot)
 {
     epoll_event event;
     event.data.fd = fd;
-    event.events = EPOLLIN | EPOLLRDHUP | EPOLLET;//EPOLLRDHUP对端断开链接
+    event.events = EPOLLIN | EPOLLRDHUP | EPOLLET;
     if(one_shot)
     {
         event.events |= EPOLLONESHOT;
@@ -36,12 +37,14 @@ void addfd(int epollfd, int fd, bool one_shot)
     setnonblocking(fd);
 }
 
+//从epoll中删除文件描述符fd
 void removefd(int epollfd, int fd)
 {
     epoll_ctl(epollfd, EPOLL_CTL_DEL, fd, 0);
     close(fd);
 }
 
+//修改文件描述符fd,重置socket上的EPOLLONESHOT事件，确保下一次可读时EPOLLIN事件能被触发
 void modfd(int epollfd, int fd, int ev)
 {
     epoll_event event;
@@ -54,6 +57,23 @@ void modfd(int epollfd, int fd, int ev)
 int http_conn::m_user_count = 0;
 int http_conn::m_epollfd = -1;
 
+
+//初始化连接
+void http_conn::init(int sockfd, const sockaddr_in & addr)
+{
+    m_sockfd = sockfd;
+    m_address = addr;
+    //如下两行是为了避免TIME_WAIT状态，仅用于调试，实际使用时应该去掉,也就是端口复用
+    int reuse = 1;
+    setsockopt(m_sockfd, SOL_SOCKET, SO_REUSEADDR, &reuse, sizeof(reuse));
+
+    //添加到EPOLL对象中
+    addfd(m_epollfd, sockfd, true);
+    m_user_count++;
+    init();
+}
+
+//关闭连接
 void http_conn::close_conn(bool real_close)
 {
     if(real_close && (m_sockfd != -1))
@@ -65,26 +85,13 @@ void http_conn::close_conn(bool real_close)
     }
 }
 
-void http_conn::init(int sockfd, const sockaddr_in & addr)
-{
-    m_sockfd = sockfd;
-    m_address = addr;
-    //如下两行是为了避免TIME_WAIT状态，仅用于调试，实际使用时应该去掉,也就是端口复用
-    int reuse = 1;
-    setsockopt(m_sockfd, SOL_SOCKET, SO_REUSEADDR, &reuse, sizeof(reuse));
-
-    addfd(m_epollfd, sockfd, true);
-    ++m_user_count;
-    init();
-}
-
 void http_conn::init()
 {
-    m_checked_state = CHECK_STATE_REQUESTION;
-    m_linger = false;
+    m_checked_state = CHECK_STATE_REQUESTION;       //初始状态为解析请求报文首行
+    m_linger = false;                               //默认不保持连接
     bytes_to_send = 0;
     bytes_have_send = 0;
-    m_method = GET;
+    m_method = GET;                                 //默认请求方法为GET
     m_url = 0;
     m_version = 0;
     m_content_length = 0;
@@ -93,6 +100,7 @@ void http_conn::init()
     m_checked_idx = 0;
     m_read_idx = 0;
     m_write_idx = 0;
+    //memset:作用是在一段内存块中填充某个给定的值，它对较大的结构体或数组进行清零操作的一种最快方法
     memset(m_real_file, '\0', sizeof(m_real_file));
     memset(m_read_buf, '\0', sizeof(m_read_buf));
     memset(m_write_buf, '\0', sizeof(m_write_buf));
@@ -102,7 +110,7 @@ void http_conn::init()
 //从状态机，用于解析出一行内容
 http_conn::LINE_STATUS http_conn::parse_line()
 {
-    printf("pares_line()\n");
+    printf("执行pares_line()函数\n");
     char temp;
 
     for( ; m_checked_idx < m_read_idx; ++m_checked_idx )
@@ -124,6 +132,7 @@ http_conn::LINE_STATUS http_conn::parse_line()
                 printf("读到完整的行 m_checked_idx == [%d]\n", m_checked_idx);
                 m_read_buf[m_checked_idx++] = '\0';
                 m_read_buf[m_checked_idx++] = '\0';
+                printf("%s\n",m_read_buf);
                 return LINE_OK;
             }
             printf("pares_line()语法错误\n");
@@ -152,10 +161,10 @@ http_conn::LINE_STATUS http_conn::parse_line()
 
 }
 
-//循环读取客户端数据，知道无数据可读或者对方关闭链接
+//循环读取客户端数据，直到无数据可读或者对方关闭连接
 bool http_conn::read()
 {
-    printf("read()\n");
+    printf("执行read()函数\n");
     if(m_read_idx >= READ_BUFFER_SIZE)
     {
         return false;
@@ -173,18 +182,21 @@ bool http_conn::read()
             }
             return false;
         }
+        //如果对方关闭连接
         else if(bytes_read == 0)
         {
             return false;
         }
         m_read_idx += bytes_read;
     }
+    printf("读取到了数据：%s\n",m_read_buf);
     return true;
 }
 
 //解析HTTP请求行，获取请求方法，目标URL以及HTTP版本号
 http_conn::HTTP_CODE http_conn::parse_request_line(char * text)
 {
+    printf("执行parse_request_line()函数\n");
     m_url = strpbrk(text, " \t");
     if(!m_url)
     {
@@ -219,8 +231,7 @@ http_conn::HTTP_CODE http_conn::parse_request_line(char * text)
     
     if(strcasecmp(m_version, "HTTP/1.1") != 0)
     {
-        printf("m_version:\n");
-        printf("%s\n",m_version);
+        printf("m_version: %s\n",m_version);
         printf("BAD_REQUEST[m_version is not http1.1]\n");
         return BAD_REQUEST;
     }
@@ -243,7 +254,8 @@ http_conn::HTTP_CODE http_conn::parse_request_line(char * text)
 //解析HTTP请求的一个头部信息
 http_conn::HTTP_CODE http_conn::parse_headers(char * text)
 {
-    printf("开始解析！剩余行数:[%d]",m_content_length);
+    printf("执行process_headers()函数\n");
+    printf("开始解析！剩余行数:[%d]\n",m_content_length);
     //遇到空行表示头部字段解析完毕
     if(text[0] == '\0')
     {
@@ -285,9 +297,10 @@ http_conn::HTTP_CODE http_conn::parse_headers(char * text)
     return NO_REQUEST;
 }
 
-//我们没有真正解析HTTP请求的消息体，只是判断他是否被完整的读入了
+//我们没有真正解析HTTP请求的消息体，只是判断它是否被完整的读入了
 http_conn::HTTP_CODE http_conn::parse_content(char * text)
 {
+    printf("执行process_content()函数\n");
     if(m_read_idx >= (m_content_length + m_checked_idx))
     {
         text[m_content_length] = '\0';
@@ -299,15 +312,15 @@ http_conn::HTTP_CODE http_conn::parse_content(char * text)
 //主状态机process 1 retrun
 http_conn::HTTP_CODE http_conn::process_read()
 {
-    printf("process_read()\n");
+    printf("执行process_read()函数\n");
     LINE_STATUS line_status = LINE_OK;
     HTTP_CODE ret = NO_REQUEST;
     char * text = 0;
-    //
+    //如果解析到了报文请求体，数据完整   或者  解析到了一行完整数据
     while( ( (m_checked_state == CHECK_STATE_CONTENT) && (line_status == LINE_OK) ) || ( (line_status = parse_line()) == LINE_OK))
     {
         printf("process_read while()!\n");
-        text = get_line();
+        text = get_line();//获取一行数据
         m_start_line = m_checked_idx;//这里因为前面调用了parse_line导致计数器已经更新了
         printf("got 1 http line:%s\n",text);
         switch (m_checked_state)
@@ -315,6 +328,7 @@ http_conn::HTTP_CODE http_conn::process_read()
             case CHECK_STATE_REQUESTION:
             {
                 ret = parse_request_line(text);
+                //语法错误
                 if(ret == BAD_REQUEST)
                 {
                     printf("parse_request_line BAD_REQUEST\n");
@@ -361,7 +375,7 @@ http_conn::HTTP_CODE http_conn::process_read()
 //当得到一个完整的、正确的HTTP请求时，我们就分析目标文件的属性。如果目标文件存在，对所有用户可读，且不是目录，则使用mmap将其映射到内存地址m_file_address处，并告诉调用者文件获取成功
 http_conn::HTTP_CODE http_conn::do_request()
 {
-    printf("do_reaquest!\n");
+    printf("执行do_request()函数\n");
     strcpy(m_real_file,doc_root);
     int len  = strlen(doc_root);
     strncpy(m_real_file + len, m_url, FILENAME_LEN - len - 1);
@@ -373,7 +387,7 @@ http_conn::HTTP_CODE http_conn::do_request()
 
     函数说明：stat()用来将参数file_name 所指的文件状态, 复制到参数buf 所指的结构中。
     */
-    printf("%s",m_real_file);
+    printf("%s\n",m_real_file);
     if(stat(m_real_file, &m_file_stat) < 0)
     {
         printf("文件不存在！\n");
@@ -393,7 +407,7 @@ http_conn::HTTP_CODE http_conn::do_request()
     int fd = open(m_real_file, O_RDONLY);
     /*
     #inlcude<sys/mann.h>
-    void mmap(void *start, size_t length, int prot, int flags, int fd, off_t offset);
+    void* mmap(void *start, size_t length, int prot, int flags, int fd, off_t offset);
     int munmap(void *start, size_t length);
     
     void *start 允许用户使用某一个人特定的地址为有这段内存的起始位置。如果他被设置为NULL，则系统自动分配一个地址。
@@ -426,6 +440,7 @@ http_conn::HTTP_CODE http_conn::do_request()
 //因为上面函数我们已经将打开的文件映射到了内存，所以必须对内存映射区执行munmap操作
 void http_conn::unmap()
 {
+    printf("执行unmap()函数\n");
     if(m_file_address)
     {
         munmap(m_file_address, m_file_stat.st_size);
@@ -436,6 +451,7 @@ void http_conn::unmap()
 //写http响应
 bool http_conn::write()
 {
+    printf("执行write()函数\n");
     printf("[-----%d-----]wirte()\n",m_sockfd);
     int temp = 0;
 
@@ -570,9 +586,15 @@ bool http_conn::add_status_line(int status, const char* title)
 //应答行的头部字段
 bool http_conn::add_headers(int content_len)
 {
-    add_content_length(content_len);
-    add_linger();
-    add_blank_line();
+    if(!add_content_length(content_len))
+        return false;
+    if(!add_content_type())
+        return false;
+    if(!add_linger())
+        return false;
+    if(!add_blank_line())
+        return false;
+    return true;
 }
 
 bool http_conn::add_content_length(int content_len)
@@ -595,16 +617,21 @@ bool http_conn::add_content(const char * content)
     return add_response("%s", content);
 }
 
+bool http_conn::add_content_type() {
+    return add_response("Content-Type:%s\r\n", "text/html");
+}
+
+
 //根据服务器处理HTTP请求的结果，决定返回给客户端的内容
 bool http_conn::process_write(HTTP_CODE ret)
 {
-    printf("process_write()\n");
+    printf("执行process_write()函数\n");
     switch (ret)
     {
         case INTERNAL_ERROR:
         {
             add_status_line(500,error_500_title);
-            add_status_line(500,error_500_form);
+            add_headers(strlen( error_500_form ));
             if(!add_content(error_500_form))
             {
                 return false;
@@ -621,7 +648,7 @@ bool http_conn::process_write(HTTP_CODE ret)
             }
             break;
         }
-        case NO_REQUEST:
+        case NO_RESOURCE:
         {
             add_status_line(404,error_404_title);
             add_headers(strlen(error_404_form));
@@ -681,6 +708,7 @@ bool http_conn::process_write(HTTP_CODE ret)
 //由线程池的工作调用，这是处理HTTP请求的入口函数
 void http_conn::process()
 {
+    printf("执行process()函数\n");
     HTTP_CODE read_ret = process_read();
     if(read_ret == NO_REQUEST)
     {

@@ -100,11 +100,11 @@ private:
     bool process_write(HTTP_CODE ret);//填充http应答
 
     //下面这一组函数被process调用以分析HTTP请求
-    HTTP_CODE parse_request_line(char * text);
-    HTTP_CODE parse_headers(char * text);
-    HTTP_CODE parse_content(char * text);
+    HTTP_CODE parse_request_line(char* text);
+    HTTP_CODE parse_headers(char* text);
+    HTTP_CODE parse_content(char* text);
     HTTP_CODE do_request();
-    char * get_line()
+    char* get_line()
     {
         return m_read_buf + m_start_line;
     }
@@ -122,18 +122,21 @@ private:
 
 public:
     
-    static int m_epollfd;//所有socket上的时间都被注册到同一个epoll内核事件表中，所以将epoll文件描述符设置为静态的
+    static int m_epollfd;//所有socket上的事件都被注册到同一个epoll内核事件表中，所以将epoll文件描述符设置为静态的
     
     static int m_user_count;//统计用户数量
 
 
 private:
     
-    int m_sockfd;//该HTTP链接的socket和对方的socket地址
+    int m_sockfd;//该HTTP连接的socket
 
-    struct sockaddr_in m_address;
+    struct sockaddr_in m_address;//对方的socket地址
 
-    
+    CHECK_STATE m_checked_state;//主状态机当前所处的状态
+   
+    METHOD m_method; //请求方法
+
     char m_read_buf[READ_BUFFER_SIZE];//读缓冲区
     
     int m_read_idx;//标识度缓冲区已经读入的客户数据的最后一个字节的下一个位置
@@ -141,20 +144,23 @@ private:
     int m_checked_idx;//当前正在分析的字符在读缓冲区的位置
     
     int m_start_line;//当前正在解析的行的起始位置
+
    
     char m_write_buf[WRITE_BUFFER_SIZE]; //写缓冲区
   
     int m_write_idx;  //写缓冲区待发送的字节
 
-    
-    CHECK_STATE m_checked_state;//主状态机当前所处的状态
-   
-
-
-    METHOD m_method; //请求方法
-
     char m_real_file[FILENAME_LEN];//客户请求目标文件的完整路径，其内容等于doc_root + m_url,doc_root是网站根目录
+    
+    char * m_file_address;//客户请求的目标文件被mmap到内存中的起始位置
    
+    struct stat m_file_stat; //目标文件的状态，通过这个我们可以判断目标文件是否存在，是否为目录，是否可读，以及文件大小等信息
+   
+    struct iovec m_iv[2]; //我们将采用writev来执行写操作，所以定义两个成员
+
+    int m_iv_count;//m_iv_count表示被写内存块的数量
+   
+    
     char * m_url; //客户请求的目标文件的文件名
     
     char * m_version;//HTTP协议版本号，我们仅支持HTTP1.1
@@ -166,15 +172,8 @@ private:
     bool m_linger;//HTTP请求是否要求保持链接
 
     
-    char * m_file_address;//客户请求的目标文件被mmap到内存中的起始位置
-   
-    struct stat m_file_stat; //目标文件的状态。通着这个我们可以判断木变文件是否存在，是否为目录，是否可读，并获得文件大小等信息
-   
-    struct iovec m_iv[2]; //我们将采用writev来执行写操作，所以定义下面两个成员，其中m_iv_count表示背写内存块的数量
-
-    int m_iv_count;
-
     int bytes_to_send;//缓冲区待发送的字节
+
     int bytes_have_send;//缓冲区已经发送的字节
 
 };
