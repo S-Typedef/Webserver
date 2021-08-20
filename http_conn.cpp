@@ -12,7 +12,7 @@ const char* error_500_title = "Internal Error";
 const char* error_500_form = "There was an unusual problem serving the requested file.\n";
 
 //网站的根目录
-const char* doc_root = "/home/chendongyu/Docment/webserver_test/webserver/root";
+const char* doc_root = "/home/chendongyu/Webserver/html";
 
 int setnonblocking(int fd)
 {
@@ -116,8 +116,8 @@ http_conn::LINE_STATUS http_conn::parse_line()
             if(m_checked_idx + 1 == m_read_idx)
             {
                 return LINE_OPEN;
-            }    
-            
+            }
+
             //表示读到了一个完整的行
             else if(m_read_buf[m_checked_idx + 1] == '\n')
             {
@@ -145,7 +145,7 @@ http_conn::LINE_STATUS http_conn::parse_line()
             printf("pares_line() error\n");
             return LINE_BAD;
         }
-        
+
     }
     //如果所有的字符都读完了还没有遇到
     return LINE_OPEN;
@@ -192,7 +192,7 @@ http_conn::HTTP_CODE http_conn::parse_request_line(char * text)
         return BAD_REQUEST;
     }
     *m_url++ = '\0';
-    
+
     char * method = text;
     if(strcasecmp(method,"GET") == 0)
     {
@@ -213,10 +213,10 @@ http_conn::HTTP_CODE http_conn::parse_request_line(char * text)
     }
     *m_version++ = '\0';
     m_version += strspn(m_version, " \t");
-    
+
     printf("[-----%d-----]m_version get!\n",m_sockfd);
     printf("%s\n",m_version);
-    
+
     if(strcasecmp(m_version, "HTTP/1.1") != 0)
     {
         printf("m_version:\n");
@@ -346,12 +346,12 @@ http_conn::HTTP_CODE http_conn::process_read()
                 line_status = LINE_OPEN;
                 break;
             }
-                
-            
+
+
             default:
             {
                 return INTERNAL_ERROR;
-            }     
+            }
         }
     }
     printf("process_read return\n");
@@ -386,7 +386,7 @@ http_conn::HTTP_CODE http_conn::do_request()
     }
     if( S_ISDIR(m_file_stat.st_mode))
     {
-        
+
         printf("文件是目录！\n");
         return BAD_REQUEST;
     }
@@ -395,7 +395,7 @@ http_conn::HTTP_CODE http_conn::do_request()
     #inlcude<sys/mann.h>
     void mmap(void *start, size_t length, int prot, int flags, int fd, off_t offset);
     int munmap(void *start, size_t length);
-    
+
     void *start 允许用户使用某一个人特定的地址为有这段内存的起始位置。如果他被设置为NULL，则系统自动分配一个地址。
     size_t length 此参数制定了内存段的长度
     int prot 此参数设置内存段访问权限：
@@ -415,7 +415,7 @@ http_conn::HTTP_CODE http_conn::do_request()
     mmap函数成功时返回指向目标内存区域的指针，失败则返回MAO_FAILED((void*)-1)并设置errno
 
     munmap函数成功返回0.失败返回-1并设置errno
-    
+
     */
     m_file_address = (char *)mmap(0, m_file_stat.st_size, PROT_READ, MAP_PRIVATE, fd, 0);//映射共享内存
     close(fd);
@@ -439,7 +439,7 @@ bool http_conn::write()
     printf("[-----%d-----]wirte()\n",m_sockfd);
     int temp = 0;
 
-    
+
     if(bytes_to_send == 0)
     {
         modfd(m_epollfd, m_sockfd, EPOLLIN);
@@ -549,7 +549,7 @@ bool http_conn::add_response(const char* format, ...)
     }
     va_list arg_list;
     va_start(arg_list, format);//接收可变参数
-    int len = vsnprintf(m_write_buf + m_write_idx, 
+    int len = vsnprintf(m_write_buf + m_write_idx,
                         WRITE_BUFFER_SIZE - 1 - m_write_idx, format, arg_list);//将可变参数写到第一个参数的内存里，写的长度为第二个参数
 
     if(len >= (WRITE_BUFFER_SIZE - 1 - m_write_idx))
@@ -611,7 +611,7 @@ bool http_conn::process_write(HTTP_CODE ret)
             }
             break;
         }
-        case BAD_REQUEST: 
+        case BAD_REQUEST:
         {
             add_status_line(400,error_400_title);
             add_headers(strlen(error_400_form));
