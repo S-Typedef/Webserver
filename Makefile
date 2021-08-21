@@ -11,6 +11,6 @@ endif
 
 server:
 	cd src && $(CXX) -o server $(RES) $^ $(CXXFLAGS) -lpthread
-	mv ./src/server .
+	mv ./src/server ./bin
 clean:
 	rm  -r server

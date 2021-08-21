@@ -28,6 +28,7 @@
 extern int addfd(int epollfd, int fd, bool one_shot);
 extern int removefd(int epollfd, int fd);
 
+//信号捕捉
 void addsig(int sig, void(handler)(int), bool restart = true)
 {
     struct sigaction ac;
@@ -113,16 +114,20 @@ int main(int argc, char* argv[])
     address.sin_port = htons(port);
     address.sin_addr.s_addr = htonl(INADDR_ANY);
 
+    //绑定
     ret = bind(listenfd, (struct sockaddr*)&address, sizeof(address));
     assert(ret >= -1);
 
+    //监听
     ret = listen(listenfd, 5);
     assert(ret >= -1);
 
-    epoll_event events[MAX_EVENT_NUMBER];
+    //创建EPOLL事件数组
+    epoll_event events[MAX_EVENT_NUMBER];//用户态的数组
     int epollfd = epoll_create(5);
     assert(epollfd != -1);
 
+    //将监听的文件描述符添加到EPOLL对象中
     addfd(epollfd, listenfd, false);
     http_conn::m_epollfd = epollfd;
 
@@ -132,12 +137,15 @@ int main(int argc, char* argv[])
     {
         printf("epoll wait!\n");
         int number = epoll_wait(epollfd, events, MAX_EVENT_NUMBER, -1);
+        //参数-1表示阻塞调用，有数据才返回
+        //返回值number表示就绪的fd个数
         if((number < 0) && (errno != EINTR))
         {
             printf("epoll failure!\n");
             break;
         }
 
+        //循环遍历事件数组
         for(int i = 0; i < number; ++i)
         {
             int sockfd = events[i].data.fd;
@@ -156,36 +164,45 @@ int main(int argc, char* argv[])
                 }
                 if(http_conn::m_user_count >= MAX_FD)
                 {
-                    show_error(connfd,"Internet server busy");
+                    //连接数已达最大值，通知客户端
+                    show_error(connfd,"Internet server busy.\n");
+                    close(connfd);
                     continue;
                 }
                 //初始化客户端链接
                 users[connfd].init(connfd, client_address);
 
             }
+            //如果对方异常或者断开连接
             else if(events[i].events & (EPOLLRDHUP | EPOLLHUP | EPOLLERR))
             {
                 printf("accpt error!\n");
                 //如果有异常直接关闭链接
                 users[sockfd].close_conn();
             }
+            //如果对方正常且可读
             else if(events[i].events & EPOLLIN)
             {
                 printf("wait epollin accpt!\n");
                 if(users[sockfd].read())
                 {
-                    pool->append(users + sockfd);//直接吧整个http_conn都传进去，不过传的都是地址哈，+sockfd就是传当前sock所在的对象呀
+                    //放到线程池中，交给工作线程处理
+                    pool->append(users + sockfd);
                 }
                 else
                 {
+                    //读数据失败
                     users[sockfd].close_conn();
                 }
             }
+            //正常且可写
             else if(events[i].events & EPOLLOUT)
             {
                 printf("wait epollout accpt!\n");
+                //写数据失败
                 if(!users[sockfd].write())
                 {
+                    printf("write failure!\n");
                     users[sockfd].close_conn();
                 }
             }

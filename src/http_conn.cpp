@@ -368,9 +368,7 @@ http_conn::HTTP_CODE http_conn::do_request()
 
     /*
     头文件：#include <sys/stat.h>   #include <unistd.h>
-
     定义函数：int stat(const char * file_name, struct stat *buf);
-
     函数说明：stat()用来将参数file_name 所指的文件状态, 复制到参数buf 所指的结构中。
     */
     printf("%s",m_real_file);
@@ -395,7 +393,6 @@ http_conn::HTTP_CODE http_conn::do_request()
     #inlcude<sys/mann.h>
     void mmap(void *start, size_t length, int prot, int flags, int fd, off_t offset);
     int munmap(void *start, size_t length);
-
     void *start 允许用户使用某一个人特定的地址为有这段内存的起始位置。如果他被设置为NULL，则系统自动分配一个地址。
     size_t length 此参数制定了内存段的长度
     int prot 此参数设置内存段访问权限：
@@ -411,11 +408,8 @@ http_conn::HTTP_CODE http_conn::do_request()
             MAP_HUGETLB:按照大内存页面来分配内存空间。大内存页面的大小可以通过/pro/meminfo文件来查看
     int fd 此参数是被映射文件对应的文件描述符。他一般通过open系统调用获得。
     off_t offset此参数设置从文件的何处开始映射（对于不需要读入整个文件的情况）
-
     mmap函数成功时返回指向目标内存区域的指针，失败则返回MAO_FAILED((void*)-1)并设置errno
-
     munmap函数成功返回0.失败返回-1并设置errno
-
     */
     m_file_address = (char *)mmap(0, m_file_stat.st_size, PROT_READ, MAP_PRIVATE, fd, 0);//映射共享内存
     close(fd);
@@ -697,5 +691,3 @@ void http_conn::process()
     }
     modfd(m_epollfd, m_sockfd, EPOLLOUT);
 }
-
-
